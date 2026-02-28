@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Products Service — Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117;
+      color: #e1e4e8;
+      min-height: 100vh;
+    }
+    header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 18px; font-weight: 600; color: #f0883e; }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block; margin-right: 8px;
+    }
+    .status-dot.ok { background: #3fb950; }
+    .status-dot.err { background: #f85149; }
+    .status-dot.loading { background: #d29922; }
+
+    .container {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .card.full { grid-column: 1 / -1; }
+    .card h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #f0883e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+    .badge.get { background: #23863633; color: #3fb950; }
+    .badge.post { background: #1f6feb33; color: #58a6ff; }
+    .badge.put { background: #d2992233; color: #d29922; }
+    .badge.delete { background: #f8514933; color: #f85149; }
+
+    .form-group { margin-bottom: 12px; }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: #8b949e;
+      margin-bottom: 4px;
+    }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 8px 12px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e1e4e8;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .form-group textarea { resize: vertical; min-height: 60px; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #f0883e; }
+    .form-group select option { background: #0d1117; color: #e1e4e8; }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .form-row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      color: #fff;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { opacity: 0.85; }
+    .btn-primary { background: #238636; }
+    .btn-blue { background: #1f6feb; }
+    .btn-orange { background: #f0883e; color: #000; }
+    .btn-red { background: #da3633; }
+
+    .result-box {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+      display: none;
+    }
+    .result-box pre {
+      font-size: 12px;
+      color: #e1e4e8;
+      white-space: pre-wrap;
+    }
+
+    .product-card {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .product-card .title { font-weight: 600; color: #f0883e; }
+    .product-card .meta { font-size: 12px; color: #8b949e; margin-top: 4px; }
+    .product-card .price { font-weight: 700; color: #3fb950; font-size: 16px; }
+
+    .detail-product { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .detail-product .title { font-size: 18px; font-weight: 600; color: #f0883e; margin-bottom: 8px; }
+    .detail-product .price { font-size: 20px; font-weight: 700; color: #3fb950; }
+    .detail-product .meta { font-size: 13px; color: #8b949e; margin-top: 8px; }
+    .detail-rating { font-size: 14px; color: #d29922; margin: 12px 0; }
+    .review-card { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+    .review-card .stars { color: #d29922; }
+    .review-card .comment { color: #e1e4e8; margin-top: 4px; }
+    .review-card .date { font-size: 11px; color: #484f58; margin-top: 4px; }
+
+    #log-output {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 250px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+    .log-entry { margin-bottom: 2px; }
+    .log-time { color: #484f58; }
+    .log-ok { color: #3fb950; }
+    .log-err { color: #f85149; }
+    .log-warn { color: #d29922; }
+    .log-info { color: #f0883e; }
+
+    .flex-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .mt-8 { margin-top: 8px; }
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 16px; }
+    .tab-bar button {
+      padding: 6px 14px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px 6px 0 0;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .tab-bar button.active { background: #161b22; color: #f0883e; border-bottom-color: #161b22; }
+
+    @media (max-width: 768px) {
+      .container { grid-template-columns: 1fr; }
+      .form-row, .form-row-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Products Service — Interface de test</h1>
+    <div id="health-status">
+      <span class="status-dot loading"></span>
+      <span style="font-size:13px">Connexion...</span>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- AUTH TOKEN -->
+    <div class="card full">
+      <h2>Authentification</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Access Token (Bearer)</label>
+          <input type="text" id="auth-token" placeholder="Coller votre JWT ici">
+        </div>
+        <div class="form-group">
+          <label>X-Service-Key (routes internes)</label>
+          <input type="text" id="service-key" placeholder="Coller INTER_SERVICE_KEY ici">
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUCT DETAIL -->
+    <div class="card full">
+      <h2><span class="badge get">GET</span> /api/v1/products/:id — Détail</h2>
+      <div class="form-group">
+        <label>ID de l'annonce</label>
+        <input type="text" id="detail-id" placeholder="UUID du produit">
+      </div>
+      <button class="btn btn-blue" id="btn-detail">Charger</button>
+      <div id="detail-results" class="mt-8"></div>
+      <div class="result-box" id="detail-raw"><pre id="detail-json"></pre></div>
+    </div>
+
+    <!-- CATEGORIES -->
+    <div class="card">
+      <h2><span class="badge get">GET</span> /api/v1/products/categories</h2>
+      <button class="btn btn-blue" id="btn-categories">Charger l'arbre</button>
+      <div class="result-box" id="cat-raw"><pre id="cat-json"></pre></div>
+    </div>
+
+    <!-- CREATE -->
+    <div class="card full">
+      <h2><span class="badge post">POST</span> /api/v1/products — Créer un produit</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Titre</label>
+          <input type="text" id="create-title" placeholder="Mon produit">
+        </div>
+        <div class="form-group">
+          <label>Prix</label>
+          <input type="number" id="create-price" placeholder="49.99" step="0.01">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="create-desc" placeholder="Description du produit..."></textarea>
+      </div>
+      <div class="form-row-3">
+        <div class="form-group">
+          <label>Stock</label>
+          <input type="number" id="create-stock" placeholder="10" value="1">
+        </div>
+        <div class="form-group">
+          <label>Catégorie</label>
+          <select id="create-category"><option value="">Aucune</option></select>
+        </div>
+        <div class="form-group">
+          <label>Ville</label>
+          <input type="text" id="create-city" placeholder="Paris">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-create">Créer</button>
+      <div class="result-box" id="create-raw"><pre id="create-json"></pre></div>
+    </div>
+
+    <!-- UPDATE -->
+    <div class="card">
+      <h2><span class="badge put">PUT</span> /api/v1/products/:id — Modifier</h2>
+      <div class="form-group">
+        <label>ID de l'annonce</label>
+        <input type="text" id="update-id" placeholder="UUID">
+      </div>
+      <div class="form-group">
+        <label>Nouveau titre</label>
+        <input type="text" id="update-title" placeholder="Titre modifié">
+      </div>
+      <div class="form-group">
+        <label>Nouveau prix</label>
+        <input type="number" id="update-price" placeholder="99.99" step="0.01">
+      </div>
+      <button class="btn btn-orange" id="btn-update">Modifier</button>
+      <div class="result-box" id="update-raw"><pre id="update-json"></pre></div>
+    </div>
+
+    <!-- DELETE -->
+    <div class="card">
+      <h2><span class="badge delete">DELETE</span> /api/v1/products/:id — Supprimer</h2>
+      <div class="form-group">
+        <label>ID de l'annonce</label>
+        <input type="text" id="delete-id" placeholder="UUID">
+      </div>
+      <button class="btn btn-red" id="btn-delete">Supprimer</button>
+      <div class="result-box" id="delete-raw"><pre id="delete-json"></pre></div>
+    </div>
+
+    <!-- MY PRODUCTS -->
+    <div class="card">
+      <h2><span class="badge get">GET</span> /api/v1/products/me — Mes annonces</h2>
+      <button class="btn btn-blue" id="btn-myads">Charger</button>
+      <div class="result-box" id="myads-raw"><pre id="myads-json"></pre></div>
+    </div>
+
+    <!-- REVIEWS -->
+    <div class="card">
+      <h2><span class="badge post">POST</span> /api/v1/products/:id/reviews — Ajouter un avis</h2>
+      <div class="form-group">
+        <label>ID du produit</label>
+        <input type="text" id="review-product-id" placeholder="UUID">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Note (1-5)</label>
+          <input type="number" id="review-rating" min="1" max="5" placeholder="5">
+        </div>
+        <div class="form-group">
+          <label>Commentaire</label>
+          <input type="text" id="review-comment" placeholder="Super produit !">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-review">Envoyer</button>
+      <div class="result-box" id="review-raw"><pre id="review-json"></pre></div>
+    </div>
+
+    <!-- INTERNAL -->
+    <div class="card full">
+      <h2><span class="badge post">INTERNAL</span> Routes internes (X-Service-Key)</h2>
+      <div class="form-row-3">
+        <div>
+          <div class="form-group">
+            <label>Product ID</label>
+            <input type="text" id="int-product-id" placeholder="UUID">
+          </div>
+          <button class="btn btn-blue" id="btn-int-get">GET /internal/products/:id</button>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>Quantité stock (+/-)</label>
+            <input type="number" id="int-stock-qty" placeholder="-2">
+          </div>
+          <button class="btn btn-orange" id="btn-int-stock">PUT /internal/products/:id/stock</button>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>Seller ID</label>
+            <input type="text" id="int-seller-id" placeholder="UUID">
+          </div>
+          <button class="btn btn-primary" id="btn-int-stats">GET stats vendeur</button>
+        </div>
+      </div>
+      <div class="result-box" id="int-raw"><pre id="int-json"></pre></div>
+    </div>
+
+    <!-- LOG -->
+    <div class="card full">
+      <h2>Console</h2>
+      <div id="log-output"></div>
+    </div>
+
+  </div>
+
+  <script src="/test.js"></script>
+</body>
+</html>

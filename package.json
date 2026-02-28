@@ -1,0 +1,18 @@
+{
+  "name": "products-service",
+  "version": "1.0.0",
+  "description": "Service produits/annonces — CRUD produits, catégories, avis, promotions",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "db:init": "node -e \"require('dotenv').config();require('./src/config/database').initDB().then(() => process.exit(0)).catch((e) => {console.error(e);process.exit(1)})\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.1"
+  }
+}
