@@ -1,6 +1,6 @@
 const requiredVars = [
   'PG_HOST', 'PG_PORT', 'PG_DATABASE', 'PG_USER', 'PG_PASSWORD',
-  'AUTH_SERVICE_URL', 'SEARCH_SERVICE_URL', 'USERS_SERVICE_URL',
+  'AUTH_SERVICE_URL', 'SEARCH_SERVICE_URL', 'USERS_SERVICE_URL', 'ORDERS_SERVICE_URL',
   'INTER_SERVICE_KEY'
 ];
 
@@ -23,6 +23,7 @@ module.exports = {
   AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
   SEARCH_SERVICE_URL: process.env.SEARCH_SERVICE_URL || 'http://localhost:3003',
   USERS_SERVICE_URL: process.env.USERS_SERVICE_URL || 'http://localhost:3002',
+  ORDERS_SERVICE_URL: process.env.ORDERS_SERVICE_URL || 'http://localhost:3005',
   INTER_SERVICE_KEY: process.env.INTER_SERVICE_KEY,
 
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000,

@@ -4,6 +4,22 @@ const searchClient = require('../services/searchClient');
 const authClient = require('../services/authClient');
 const { BadRequestError } = require('../utils/errors');
 
+/** Libellé brut vendeur pour exposition API (aligné avec enrichReviewsWithUserNames). */
+function sellerLabelFromAuthUser(u) {
+  if (!u) return null;
+  const username = u.username != null ? String(u.username).trim() : '';
+  if (username) return username;
+  const fn = u.first_name != null ? String(u.first_name).trim() : '';
+  const ln = u.last_name != null ? String(u.last_name).trim() : '';
+  if (fn || ln) return `${fn} ${ln}`.trim();
+  const email = u.email != null ? String(u.email).trim() : '';
+  if (email) {
+    const local = email.split('@')[0];
+    return local || null;
+  }
+  return null;
+}
+
 async function enrichReviewsWithUserNames(reviews) {
   const userIds = [...new Set(reviews.map(r => r.userId).filter(Boolean))];
   const userMap = {};
@@ -65,11 +81,26 @@ async function getAd(req, res, next) {
 
 async function getSellerAds(req, res, next) {
   try {
+    const sellerId = req.params.sellerId;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
 
-    const result = await productService.getSellerAds(req.params.sellerId, page, limit);
-    res.json(result);
+    const result = await productService.getSellerAds(sellerId, page, limit);
+
+    let sellerName;
+    try {
+      const authRes = await authClient.getUserById(sellerId);
+      const u = authRes.user || authRes;
+      sellerName = sellerLabelFromAuthUser(u);
+    } catch (_e) {
+      /* catalogue sans sellerName si Auth indisponible */
+    }
+
+    const products = sellerName
+      ? result.products.map((p) => ({ ...p, sellerName }))
+      : result.products;
+
+    res.json({ ...result, products });
   } catch (err) {
     next(err);
   }
@@ -79,6 +110,25 @@ async function getCategories(_req, res, next) {
   try {
     const tree = await categoryService.getCategoryTree();
     res.json({ categories: tree });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createCategory(req, res, next) {
+  try {
+    const { name, parentId } = req.body || {};
+    const category = await categoryService.createCategory(name, parentId || null);
+    res.status(201).json({ category, message: 'Catégorie créée' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteCategory(req, res, next) {
+  try {
+    await categoryService.deleteCategory(req.params.id);
+    res.json({ message: 'Catégorie supprimée' });
   } catch (err) {
     next(err);
   }
@@ -166,7 +216,65 @@ async function getMyAds(req, res, next) {
   }
 }
 
+async function getFlashSales(req, res, next) {
+  try {
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const products = await productService.listFlashSales(limit);
+    res.json({ products });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getTopSellers(req, res, next) {
+  try {
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const products = await productService.listTopSellers(limit);
+    res.json({ products });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function enableFlashSale(req, res, next) {
+  try {
+    const discountPercent = req.body?.discountPercent;
+    const durationHours = req.body?.durationHours ?? 24;
+    const product = await productService.setFlashSale(req.params.id, req.user.id, discountPercent, durationHours);
+
+    try {
+      await searchClient.updateProduct(product.id, {
+        price: product.price
+      });
+    } catch (_e) {
+      console.warn('[products] Échec synchro flash sale Search Service:', _e.message);
+    }
+
+    res.json({ product, message: 'Flash sale activée' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function disableFlashSale(req, res, next) {
+  try {
+    const product = await productService.clearFlashSale(req.params.id, req.user.id);
+
+    try {
+      await searchClient.updateProduct(product.id, {
+        price: product.price
+      });
+    } catch (_e) {
+      console.warn('[products] Échec synchro arrêt flash sale Search Service:', _e.message);
+    }
+
+    res.json({ product, message: 'Flash sale désactivée' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
-  listAds, getAd, getSellerAds, getCategories,
-  createAd, updateAd, deleteAd, getMyAds
+  listAds, getAd, getSellerAds, getCategories, createCategory, deleteCategory,
+  createAd, updateAd, deleteAd, getMyAds, getFlashSales, getTopSellers, enableFlashSale, disableFlashSale
 };

@@ -1,5 +1,6 @@
 const { query } = require('../config/database');
 const { BadRequestError, NotFoundError, ForbiddenError } = require('../utils/errors');
+const ordersClient = require('./ordersClient');
 
 async function listProducts(filters = {}) {
   const {
@@ -109,6 +110,8 @@ async function createProduct(sellerId, data) {
 
   if (!title || title.trim().length < 3) throw new BadRequestError('Titre requis (min 3 caractères)');
   if (price === undefined || price === null || Number(price) < 0) throw new BadRequestError('Prix invalide');
+  const imgArr = Array.isArray(images) ? images : [];
+  if (imgArr.length < 3) throw new BadRequestError('Minimum 3 photos requises pour créer une annonce');
 
   const result = await query(
     `INSERT INTO products (title, description, price, stock, seller_id, category_id, city, country, images)
@@ -123,7 +126,7 @@ async function createProduct(sellerId, data) {
       categoryId || null,
       city || '',
       country || 'France',
-      images || []
+      imgArr
     ]
   );
 
@@ -164,7 +167,21 @@ async function updateProduct(id, sellerId, data) {
     params
   );
 
-  return formatProduct(result.rows[0]);
+  let updated = result.rows[0];
+  if (data.price !== undefined && updated.is_flash_sale && updated.flash_sale_discount_percent) {
+    const pct = Number(updated.flash_sale_discount_percent);
+    const newFlashPrice = Number((Number(updated.price) * (1 - pct / 100)).toFixed(2));
+    const refreshed = await query(
+      `UPDATE products
+       SET flash_sale_price = $1
+       WHERE id = $2
+       RETURNING *`,
+      [newFlashPrice, id]
+    );
+    updated = refreshed.rows[0];
+  }
+
+  return formatProduct(updated);
 }
 
 async function deleteProduct(id, sellerId) {
@@ -245,13 +262,151 @@ async function getSellerStats(sellerId) {
   };
 }
 
+async function getSellerProductIds(sellerId) {
+  const result = await query(
+    'SELECT id FROM products WHERE seller_id = $1 AND deleted = FALSE',
+    [sellerId]
+  );
+  return result.rows.map((r) => r.id);
+}
+
+async function setFlashSale(id, sellerId, discountPercent, durationHours = 24) {
+  const pct = Number(discountPercent);
+  if (!Number.isInteger(pct) || pct < 1 || pct > 90) {
+    throw new BadRequestError('Le pourcentage de réduction doit être un entier entre 1 et 90');
+  }
+
+  const dur = Number(durationHours);
+  if (!Number.isInteger(dur) || dur < 1 || dur > 720) {
+    throw new BadRequestError('La durée doit être entre 1 et 720 heures (30 jours)');
+  }
+
+  const existing = await query(
+    'SELECT id, seller_id, price, deleted FROM products WHERE id = $1',
+    [id]
+  );
+  if (existing.rows.length === 0 || existing.rows[0].deleted) {
+    throw new NotFoundError('Produit non trouvé');
+  }
+  if (existing.rows[0].seller_id !== sellerId) {
+    throw new ForbiddenError('Vous n\'êtes pas le propriétaire');
+  }
+
+  const basePrice = Number(existing.rows[0].price);
+  const discounted = Number((basePrice * (1 - pct / 100)).toFixed(2));
+
+  const result = await query(
+    `UPDATE products
+     SET is_flash_sale = TRUE,
+         flash_sale_discount_percent = $1,
+         flash_sale_price = $2,
+         flash_sale_started_at = NOW(),
+         flash_sale_ends_at = NOW() + make_interval(hours => $4::int)
+     WHERE id = $3
+     RETURNING *`,
+    [pct, discounted, id, dur]
+  );
+
+  return formatProduct(result.rows[0]);
+}
+
+async function clearFlashSale(id, sellerId) {
+  const existing = await query(
+    'SELECT id, seller_id, deleted FROM products WHERE id = $1',
+    [id]
+  );
+  if (existing.rows.length === 0 || existing.rows[0].deleted) {
+    throw new NotFoundError('Produit non trouvé');
+  }
+  if (existing.rows[0].seller_id !== sellerId) {
+    throw new ForbiddenError('Vous n\'êtes pas le propriétaire');
+  }
+
+  const result = await query(
+    `UPDATE products
+     SET is_flash_sale = FALSE,
+         flash_sale_discount_percent = NULL,
+         flash_sale_price = NULL,
+         flash_sale_started_at = NULL,
+         flash_sale_ends_at = NULL
+     WHERE id = $1
+     RETURNING *`,
+    [id]
+  );
+
+  return formatProduct(result.rows[0]);
+}
+
+async function listFlashSales(limit = 20) {
+  const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+  const result = await query(
+    `SELECT p.*, c.name AS category_name,
+            (SELECT COUNT(*) FROM reviews r WHERE r.product_id = p.id AND r.deleted = FALSE)::int AS reviews_count
+     FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id
+     WHERE p.deleted = FALSE
+       AND p.is_flash_sale = TRUE
+       AND p.flash_sale_discount_percent IS NOT NULL
+       AND p.flash_sale_discount_percent > 0
+       AND p.flash_sale_price IS NOT NULL
+       AND (p.flash_sale_ends_at IS NULL OR p.flash_sale_ends_at > NOW())
+     ORDER BY p.flash_sale_started_at DESC, p.updated_at DESC
+     LIMIT $1`,
+    [normalizedLimit]
+  );
+  return result.rows.map(formatProduct);
+}
+
+async function listTopSellers(limit = 20) {
+  const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+  let sales;
+  try {
+    sales = await ordersClient.getTopPaidProducts(normalizedLimit);
+  } catch (_err) {
+    return [];
+  }
+  const ranked = Array.isArray(sales.items) ? sales.items : [];
+  if (ranked.length === 0) {
+    return [];
+  }
+
+  const productIds = ranked.map((item) => item.productId);
+  const result = await query(
+    `SELECT p.*, c.name AS category_name,
+            (SELECT COUNT(*) FROM reviews r WHERE r.product_id = p.id AND r.deleted = FALSE)::int AS reviews_count
+     FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id
+     WHERE p.deleted = FALSE AND p.id = ANY($1::uuid[])`,
+    [productIds]
+  );
+
+  const byId = new Map(result.rows.map((row) => [row.id, row]));
+  return ranked
+    .map((item) => {
+      const row = byId.get(item.productId);
+      if (!row) return null;
+      return {
+        ...formatProduct(row),
+        quantitySold: Number(item.quantitySold) || 0
+      };
+    })
+    .filter(Boolean);
+}
+
 function formatProduct(row) {
   if (!row) return null;
+  const isFlashSale = row.is_flash_sale === true;
+  const flashSalePrice = row.flash_sale_price !== null && row.flash_sale_price !== undefined
+    ? parseFloat(row.flash_sale_price)
+    : null;
+  const basePrice = parseFloat(row.price);
+  const finalPrice = isFlashSale && flashSalePrice !== null ? flashSalePrice : basePrice;
   return {
     id: row.id,
     title: row.title,
     description: row.description,
-    price: parseFloat(row.price),
+    price: finalPrice,
+    basePrice,
     stock: row.stock,
     sellerId: row.seller_id,
     categoryId: row.category_id,
@@ -260,6 +415,14 @@ function formatProduct(row) {
     country: row.country,
     images: row.images || [],
     viewsCount: row.views_count,
+    reviewsCount: row.reviews_count !== undefined ? parseInt(row.reviews_count, 10) : 0,
+    isFlashSale,
+    flashSaleDiscountPercent: row.flash_sale_discount_percent === null || row.flash_sale_discount_percent === undefined
+      ? null
+      : Number(row.flash_sale_discount_percent),
+    flashSalePrice,
+    flashSaleStartedAt: row.flash_sale_started_at || null,
+    flashSaleEndsAt: row.flash_sale_ends_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -268,5 +431,5 @@ function formatProduct(row) {
 module.exports = {
   listProducts, getProduct, getProductRaw, createProduct, updateProduct,
   deleteProduct, getMyAds, getSellerAds, incrementViews,
-  updateStock, getSellerStats, formatProduct
+  updateStock, getSellerStats, getSellerProductIds, setFlashSale, clearFlashSale, listFlashSales, listTopSellers, formatProduct
 };

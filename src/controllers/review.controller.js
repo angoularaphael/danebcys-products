@@ -38,4 +38,24 @@ async function addReview(req, res, next) {
   }
 }
 
-module.exports = { listReviews, addReview };
+async function listMyReviews(req, res, next) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const result = await reviewService.listReviewsByUser(req.user.id, page, limit);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function checkEligibility(req, res, next) {
+  try {
+    const result = await reviewService.checkEligibility(req.params.id, req.user.id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listReviews, addReview, listMyReviews, checkEligibility };

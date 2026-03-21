@@ -15,6 +15,15 @@ router.get('/products/seller/:sellerId/stats', async (req, res, next) => {
   }
 });
 
+router.get('/products/seller/:sellerId/ids', async (req, res, next) => {
+  try {
+    const ids = await productService.getSellerProductIds(req.params.sellerId);
+    res.json({ productIds: ids });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/products/:id', async (req, res, next) => {
   try {
     const product = await productService.getProductRaw(req.params.id);

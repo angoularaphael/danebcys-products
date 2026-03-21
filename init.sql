@@ -24,7 +24,12 @@ CREATE TABLE IF NOT EXISTS products (
   city VARCHAR(100) DEFAULT '',
   country VARCHAR(100) DEFAULT 'France',
   images TEXT[] DEFAULT '{}',
+  tags TEXT[] DEFAULT '{}',
   views_count INTEGER NOT NULL DEFAULT 0,
+  is_flash_sale BOOLEAN NOT NULL DEFAULT FALSE,
+  flash_sale_discount_percent INTEGER,
+  flash_sale_price DECIMAL(12,2),
+  flash_sale_started_at TIMESTAMPTZ,
   deleted BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -64,6 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_products_active ON products (id) WHERE deleted = 
 CREATE INDEX IF NOT EXISTS idx_products_views ON products (views_count DESC) WHERE deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_products_price ON products (price) WHERE deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_products_created ON products (created_at DESC) WHERE deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_products_flash_sale ON products (is_flash_sale, flash_sale_started_at DESC) WHERE deleted = FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews (product_id) WHERE deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_reviews_user ON reviews (user_id) WHERE deleted = FALSE;
@@ -252,3 +258,32 @@ INSERT INTO categories (id, name, parent_id) VALUES
   ('cat-14-3', 'Formations en ligne', 'pcat-14'),
   ('cat-14-4', 'Musique & vidéo dématérialisée', 'pcat-14')
 ON CONFLICT DO NOTHING;
+
+-- Migration : colonne tags si absente
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_flash_sale BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_discount_percent INTEGER;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_price DECIMAL(12,2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_started_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_ends_at TIMESTAMPTZ;
+
+-- Nettoyage migration flash sale
+UPDATE products
+SET
+  is_flash_sale = FALSE,
+  flash_sale_discount_percent = NULL,
+  flash_sale_price = NULL,
+  flash_sale_started_at = NULL
+WHERE
+  is_flash_sale = TRUE
+  AND (
+    flash_sale_discount_percent IS NULL
+    OR flash_sale_discount_percent <= 0
+    OR flash_sale_discount_percent >= 100
+    OR flash_sale_price IS NULL
+  );
+
+-- Migration : images par défaut pour produits sans images (placeholder générique)
+UPDATE products
+SET images = ARRAY['https://placehold.co/600x400?text=Produit']
+WHERE images = '{}' OR array_length(images, 1) IS NULL;

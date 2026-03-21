@@ -43,7 +43,7 @@ async function optionalAuth(req, _res, next) {
 }
 
 /**
- * Vérifie que l'utilisateur est vendeur ou super admin.
+ * Vérifie que l'utilisateur est autorisé à gérer des annonces.
  * À utiliser après authenticate — le token doit être validé en premier.
  */
 function requireSeller(req, _res, next) {
@@ -51,8 +51,8 @@ function requireSeller(req, _res, next) {
     return next(new UnauthorizedError('Token d\'accès requis'));
   }
   const role = req.user.role;
-  if (role !== 'vendeur' && role !== 'admin') {
-    return next(new ForbiddenError('Seuls les vendeurs et le super admin peuvent ajouter une annonce'));
+  if (role !== 'vendeur' && role !== 'admin' && role !== 'user') {
+    return next(new ForbiddenError('Rôle non autorisé pour gérer les annonces'));
   }
   next();
 }
