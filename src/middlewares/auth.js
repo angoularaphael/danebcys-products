@@ -1,6 +1,8 @@
+// Vérifie le jeton Bearer via auth-service:3001
 const authClient = require('../services/authClient');
 const { UnauthorizedError, ForbiddenError } = require('../utils/errors');
 
+// Vérifie le token JWT via Auth-service port 3001.
 async function authenticate(req, _res, next) {
   try {
     const header = req.headers.authorization;
@@ -23,6 +25,7 @@ async function authenticate(req, _res, next) {
   }
 }
 
+// Token optionnel : si présent, appelle Auth-service port 3001.
 async function optionalAuth(req, _res, next) {
   try {
     const header = req.headers.authorization;
@@ -42,10 +45,7 @@ async function optionalAuth(req, _res, next) {
   next();
 }
 
-/**
- * Vérifie que l'utilisateur est autorisé à gérer des annonces.
- * À utiliser après authenticate — le token doit être validé en premier.
- */
+// Seuls vendeur, admin et user peuvent gérer des annonces.
 function requireSeller(req, _res, next) {
   if (!req.user) {
     return next(new UnauthorizedError('Token d\'accès requis'));

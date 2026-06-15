@@ -1,3 +1,4 @@
+// Routes catalogue /api/v1/products
 const { Router } = require('express');
 const { authenticate, optionalAuth, requireSeller } = require('../middlewares/auth');
 const { requireAdmin } = require('../middlewares/admin');
@@ -5,9 +6,10 @@ const { productLimiter } = require('../middlewares/rateLimiter');
 const productCtrl = require('../controllers/product.controller');
 const reviewCtrl = require('../controllers/review.controller');
 
+// Routeur Express principal monté sur /api/v1/products.
 const router = Router();
 
-// ─── Routes admin (catégories) ──────────────────────────────
+// Sous-routeur admin (/api/v1/products/admin) — authenticate + requireAdmin.
 const adminRouter = Router();
 adminRouter.use(authenticate, requireAdmin);
 adminRouter.post('/categories', productCtrl.createCategory);

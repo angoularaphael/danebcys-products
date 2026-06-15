@@ -1,6 +1,8 @@
+// Gestion des catégories produits
 const { query } = require('../config/database');
 const { NotFoundError, BadRequestError } = require('../utils/errors');
 
+// Construit l'arbre hiérarchique des catégories depuis PostgreSQL (table categories).
 async function getCategoryTree() {
   const result = await query('SELECT * FROM categories ORDER BY id');
   const rows = result.rows;
@@ -16,6 +18,7 @@ async function getCategoryTree() {
   return parents;
 }
 
+// Récupère une catégorie par id (PostgreSQL table categories).
 async function getCategory(id) {
   const result = await query('SELECT * FROM categories WHERE id = $1', [id]);
   if (result.rows.length === 0) throw new NotFoundError('Catégorie non trouvée');
@@ -23,11 +26,13 @@ async function getCategory(id) {
   return { id: row.id, name: row.name, parentId: row.parent_id };
 }
 
+// Liste plate de toutes les catégories (PostgreSQL table categories).
 async function getAllCategories() {
   const result = await query('SELECT * FROM categories ORDER BY id');
   return result.rows.map(r => ({ id: r.id, name: r.name, parentId: r.parent_id }));
 }
 
+// Crée une catégorie parente ou sous-catégorie (PostgreSQL INSERT categories).
 async function createCategory(name, parentId = null) {
   const trimmed = (name || '').trim();
   if (!trimmed) throw new BadRequestError('Le nom de la catégorie est requis');
@@ -49,6 +54,7 @@ async function createCategory(name, parentId = null) {
   return getCategory(id);
 }
 
+// Supprime une catégorie si sans enfants ni produits associés (PostgreSQL DELETE categories).
 async function deleteCategory(id) {
   const cat = await getCategory(id);
 

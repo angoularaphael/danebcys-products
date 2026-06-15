@@ -1,7 +1,10 @@
+// CRUD produits, stock et promotions flash
 const { query } = require('../config/database');
 const { BadRequestError, NotFoundError, ForbiddenError } = require('../utils/errors');
 const ordersClient = require('./ordersClient');
 
+// Liste paginée de produits avec filtres texte, catégorie, ville et prix.
+// Source : PostgreSQL (tables products, categories) ; pas d'appel microservice externe.
 async function listProducts(filters = {}) {
   const {
     q, categoryId, city, minPrice, maxPrice,
@@ -81,6 +84,7 @@ async function listProducts(filters = {}) {
   };
 }
 
+// Récupère un produit public par id avec nom de catégorie (PostgreSQL products + categories).
 async function getProduct(id) {
   const result = await query(
     `SELECT p.*, c.name AS category_name
@@ -93,12 +97,15 @@ async function getProduct(id) {
   return formatProduct(result.rows[0]);
 }
 
+// Récupère une ligne produit brute sans jointure (PostgreSQL products).
+// Utilisé par les routes /internal pour orders-service et autres microservices.
 async function getProductRaw(id) {
   const result = await query('SELECT * FROM products WHERE id = $1', [id]);
   if (result.rows.length === 0) return null;
   return result.rows[0];
 }
 
+// Crée une annonce pour un vendeur (PostgreSQL INSERT products).
 async function createProduct(sellerId, data) {
   if (data.id !== undefined) {
     throw new BadRequestError('L\'ID du produit est généré automatiquement, ne pas le fournir');
@@ -133,6 +140,8 @@ async function createProduct(sellerId, data) {
   return formatProduct(result.rows[0]);
 }
 
+// Met à jour une annonce si l'appelant en est le propriétaire (PostgreSQL UPDATE products).
+// Recalcule flash_sale_price si le prix de base change pendant une vente flash.
 async function updateProduct(id, sellerId, data) {
   const existing = await query(
     'SELECT * FROM products WHERE id = $1 AND deleted = FALSE',
@@ -184,6 +193,7 @@ async function updateProduct(id, sellerId, data) {
   return formatProduct(updated);
 }
 
+// Suppression logique d'une annonce (PostgreSQL UPDATE products SET deleted = TRUE).
 async function deleteProduct(id, sellerId) {
   const existing = await query(
     'SELECT * FROM products WHERE id = $1 AND deleted = FALSE',
@@ -196,6 +206,7 @@ async function deleteProduct(id, sellerId) {
   return { deleted: true };
 }
 
+// Liste les annonces du vendeur connecté (PostgreSQL products WHERE seller_id).
 async function getMyAds(sellerId, page = 1, limit = 20) {
   const offset = (Math.max(1, page) - 1) * limit;
 
@@ -223,10 +234,13 @@ async function getMyAds(sellerId, page = 1, limit = 20) {
   };
 }
 
+// Alias public de getMyAds pour le catalogue vendeur (même requête PostgreSQL).
 async function getSellerAds(sellerId, page = 1, limit = 20) {
   return getMyAds(sellerId, page, limit);
 }
 
+// Incrémente le compteur de vues côté PostgreSQL (colonne views_count).
+// Complété par searchClient→MongoDB products_index dans le contrôleur.
 async function incrementViews(id) {
   const result = await query(
     'UPDATE products SET views_count = views_count + 1 WHERE id = $1 AND deleted = FALSE RETURNING views_count',
@@ -236,6 +250,8 @@ async function incrementViews(id) {
   return result.rows[0].views_count;
 }
 
+// Ajuste le stock d'un produit (appel interne orders-service après commande).
+// PostgreSQL UPDATE products.stock ; peut être négatif en delta (quantity).
 async function updateStock(id, quantity) {
   const existing = await query('SELECT stock FROM products WHERE id = $1 AND deleted = FALSE', [id]);
   if (existing.rows.length === 0) throw new NotFoundError('Produit non trouvé');
@@ -250,6 +266,8 @@ async function updateStock(id, quantity) {
   return formatProduct(result.rows[0]);
 }
 
+// Statistiques agrégées d'un vendeur : nombre d'annonces et vues totales (PostgreSQL products).
+// Appelé par GET /internal/products/seller/:sellerId/stats.
 async function getSellerStats(sellerId) {
   const result = await query(
     `SELECT COUNT(*) AS count, COALESCE(SUM(views_count), 0) AS total_views
@@ -262,6 +280,8 @@ async function getSellerStats(sellerId) {
   };
 }
 
+// Liste les ids produits actifs d'un vendeur (PostgreSQL products).
+// Appelé par GET /internal/products/seller/:sellerId/ids.
 async function getSellerProductIds(sellerId) {
   const result = await query(
     'SELECT id FROM products WHERE seller_id = $1 AND deleted = FALSE',
@@ -270,6 +290,7 @@ async function getSellerProductIds(sellerId) {
   return result.rows.map((r) => r.id);
 }
 
+// Active une vente flash sur un produit (PostgreSQL UPDATE products flash_sale_*).
 async function setFlashSale(id, sellerId, discountPercent, durationHours = 24) {
   const pct = Number(discountPercent);
   if (!Number.isInteger(pct) || pct < 1 || pct > 90) {
@@ -310,6 +331,7 @@ async function setFlashSale(id, sellerId, discountPercent, durationHours = 24) {
   return formatProduct(result.rows[0]);
 }
 
+// Désactive la vente flash d'un produit (PostgreSQL, remise à NULL des champs flash).
 async function clearFlashSale(id, sellerId) {
   const existing = await query(
     'SELECT id, seller_id, deleted FROM products WHERE id = $1',
@@ -337,6 +359,7 @@ async function clearFlashSale(id, sellerId) {
   return formatProduct(result.rows[0]);
 }
 
+// Liste les annonces en vente flash actives (PostgreSQL products + sous-requête reviews).
 async function listFlashSales(limit = 20) {
   const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
   const result = await query(
@@ -357,8 +380,21 @@ async function listFlashSales(limit = 20) {
   return result.rows.map(formatProduct);
 }
 
+// Durée de vie du cache mémoire pour listTopSellers (60 secondes).
+const TOP_SELLERS_CACHE_TTL_MS = 60_000;
+// Cache en mémoire des classements top vendeurs par limite demandée.
+const topSellersCache = new Map();
+
+// Classement des produits les plus vendus.
+// Appels : orders-service (GET /internal/orders/top-products), puis PostgreSQL pour enrichir.
 async function listTopSellers(limit = 20) {
   const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+  const now = Date.now();
+  const cached = topSellersCache.get(normalizedLimit);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   let sales;
   try {
     sales = await ordersClient.getTopPaidProducts(normalizedLimit);
@@ -367,6 +403,7 @@ async function listTopSellers(limit = 20) {
   }
   const ranked = Array.isArray(sales.items) ? sales.items : [];
   if (ranked.length === 0) {
+    topSellersCache.set(normalizedLimit, { expiresAt: now + TOP_SELLERS_CACHE_TTL_MS, data: [] });
     return [];
   }
 
@@ -381,7 +418,7 @@ async function listTopSellers(limit = 20) {
   );
 
   const byId = new Map(result.rows.map((row) => [row.id, row]));
-  return ranked
+  const data = ranked
     .map((item) => {
       const row = byId.get(item.productId);
       if (!row) return null;
@@ -391,8 +428,12 @@ async function listTopSellers(limit = 20) {
       };
     })
     .filter(Boolean);
+
+  topSellersCache.set(normalizedLimit, { expiresAt: now + TOP_SELLERS_CACHE_TTL_MS, data });
+  return data;
 }
 
+// Formate une ligne PostgreSQL products en objet API (prix flash, camelCase).
 function formatProduct(row) {
   if (!row) return null;
   const isFlashSale = row.is_flash_sale === true;

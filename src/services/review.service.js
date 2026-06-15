@@ -1,7 +1,9 @@
+// Avis clients : création, lecture et modération
 const { query } = require('../config/database');
 const ordersClient = require('./ordersClient');
 const { BadRequestError, NotFoundError, ConflictError, ForbiddenError } = require('../utils/errors');
 
+// Liste paginée des avis d'un produit (PostgreSQL table reviews).
 async function listReviews(productId, page = 1, limit = 20) {
   const offset = (Math.max(1, page) - 1) * limit;
 
@@ -27,6 +29,8 @@ async function listReviews(productId, page = 1, limit = 20) {
   };
 }
 
+// Ajoute un avis sur un produit après vérification d'éligibilité.
+// Appels : PostgreSQL (products, reviews), orders-service (can-review).
 async function addReview(productId, userId, data) {
   const product = await query(
     'SELECT seller_id FROM products WHERE id = $1 AND deleted = FALSE',
@@ -64,6 +68,7 @@ async function addReview(productId, userId, data) {
   }
 }
 
+// Liste les avis laissés par un utilisateur (PostgreSQL reviews + JOIN products).
 async function listReviewsByUser(userId, page = 1, limit = 50) {
   const offset = (Math.max(1, page) - 1) * limit;
 
@@ -94,6 +99,7 @@ async function listReviewsByUser(userId, page = 1, limit = 50) {
   };
 }
 
+// Calcule la note moyenne et le nombre d'avis d'un produit (PostgreSQL reviews).
 async function getAverageRating(productId) {
   const result = await query(
     `SELECT COALESCE(AVG(rating), 0) AS avg_rating, COUNT(*) AS count
@@ -106,6 +112,7 @@ async function getAverageRating(productId) {
   };
 }
 
+// Formate une ligne PostgreSQL reviews en objet API camelCase.
 function formatReview(row) {
   if (!row) return null;
   return {
@@ -120,6 +127,8 @@ function formatReview(row) {
   };
 }
 
+// Vérifie si un utilisateur peut laisser un avis sur un produit.
+// Appels : PostgreSQL (products, reviews), orders-service (can-review).
 async function checkEligibility(productId, userId) {
   const product = await query(
     'SELECT seller_id FROM products WHERE id = $1 AND deleted = FALSE',

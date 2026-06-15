@@ -1,7 +1,9 @@
+// Client HTTP vers auth-service:3001
 const http = require('http');
 const https = require('https');
 const env = require('../config/env');
 
+// Appelle Auth-service port 3001 avec la clé inter-services.
 function callAuth(method, path, body = null) {
   return new Promise((resolve, reject) => {
     const url = new URL(env.AUTH_SERVICE_URL);
@@ -47,10 +49,14 @@ function callAuth(method, path, body = null) {
   });
 }
 
+// Valide un access token JWT auprès d'auth-service.
+// Appel : POST {AUTH_SERVICE_URL}/internal/validate-token
 async function validateToken(accessToken) {
   return callAuth('POST', '/internal/validate-token', { accessToken });
 }
 
+// Récupère un utilisateur par id auprès d'auth-service.
+// Appel : GET {AUTH_SERVICE_URL}/internal/users/:userId
 async function getUserById(userId) {
   return callAuth('GET', `/internal/users/${userId}`);
 }

@@ -1,7 +1,9 @@
+// Client HTTP vers Orders-service:3005 (top vendeurs)
 const http = require('http');
 const https = require('https');
 const env = require('../config/env');
 
+// Appelle Orders-service port 3005 (GET uniquement).
 function callOrders(path) {
   return new Promise((resolve, reject) => {
     const url = new URL(env.ORDERS_SERVICE_URL);
@@ -45,11 +47,15 @@ function callOrders(path) {
   });
 }
 
+// Récupère les produits les plus vendus (commandes payées).
+// Appel : GET {ORDERS_SERVICE_URL}/internal/orders/top-products?limit=N
 async function getTopPaidProducts(limit = 20) {
   const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
   return callOrders(`/internal/orders/top-products?limit=${normalizedLimit}`);
 }
 
+// Vérifie si un utilisateur peut laisser un avis (commande livrée contenant le produit).
+// Appel : GET {ORDERS_SERVICE_URL}/internal/orders/can-review?userId=&productId=
 async function canReview(userId, productId) {
   const params = new URLSearchParams({ userId, productId });
   const result = await callOrders(`/internal/orders/can-review?${params}`);

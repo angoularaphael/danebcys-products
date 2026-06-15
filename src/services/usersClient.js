@@ -1,7 +1,9 @@
+// Client HTTP vers Users-service:3002
 const http = require('http');
 const https = require('https');
 const env = require('../config/env');
 
+// Appelle Users-service port 3002 avec la clé inter-services.
 function callUsers(method, path, body = null) {
   return new Promise((resolve, reject) => {
     const url = new URL(env.USERS_SERVICE_URL);
@@ -47,6 +49,8 @@ function callUsers(method, path, body = null) {
   });
 }
 
+// Vérifie si un produit est dans les favoris d'un utilisateur.
+// Appel : GET {USERS_SERVICE_URL}/internal/favorites/:userId/:adId
 async function isFavorite(userId, adId) {
   const result = await callUsers('GET', `/internal/favorites/${userId}/${adId}`);
   return result.isFavorite;

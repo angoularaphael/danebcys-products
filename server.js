@@ -1,7 +1,9 @@
+// Point d'entrée Products-service : PostgreSQL, MongoDB et écoute HTTP (port 3004)
 require('dotenv').config();
 
 const app = require('./src/app');
 const { pool, initDB, query } = require('./src/config/database');
+const { connectMongo } = require('./src/config/mongodb');
 const env = require('./src/config/env');
 
 const SAMPLE_PRODUCTS = [
@@ -46,6 +48,7 @@ async function seedProducts() {
   return seeded;
 }
 
+// * (Re)synchronise l'index Mongo `products_index` à partir du PostgreSQL au démarrage. * L'index est désormais embarqué localement (fusion ex-Search-service).
 async function syncProductsToSearch() {
   try {
     const { query } = require('./src/config/database');
@@ -81,16 +84,16 @@ async function syncProductsToSearch() {
         createdAt: p.created_at
       }));
       const res = await searchClient.bulkIndex(toIndex);
-      console.log(`[sync] ${res.indexed} produits indexés dans Search Service (${res.inserted} insérés, ${res.updated} mis à jour)`);
+      console.log(`[sync] ${res.indexed} produits (re)indexés (${res.inserted} insérés, ${res.updated} mis à jour)`);
     }
 
     const validIds = rows.map(p => String(p.id));
     const cleanupRes = await searchClient.cleanupIndex(validIds);
     if (cleanupRes.removed > 0) {
-      console.log(`[sync] ${cleanupRes.removed} produit(s) obsolète(s) retiré(s) de l'index (IDs incohérents)`);
+      console.log(`[sync] ${cleanupRes.removed} produit(s) obsolète(s) retiré(s) de l'index`);
     }
   } catch (err) {
-    console.warn('[sync] Échec indexation Search Service:', err.message);
+    console.warn('[sync] Échec indexation produits:', err.message);
   }
 }
 
@@ -102,6 +105,9 @@ async function start() {
     console.log('[Products Service] PostgreSQL connecté');
 
     await initDB();
+
+    // L'index recherche est désormais embarqué localement (fusion Search-service).
+    await connectMongo();
 
     if (env.NODE_ENV === 'development') {
       await seedProducts();
