@@ -49,6 +49,14 @@ CREATE TABLE IF NOT EXISTS reviews (
   UNIQUE(product_id, user_id)
 );
 
+-- ─── Migrations (colonnes ajoutées après création initiale du schéma) ───
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_flash_sale BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_discount_percent INTEGER;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_price DECIMAL(12,2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_started_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_ends_at TIMESTAMPTZ;
+
 -- ─── Ads / Promotions ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS ads_promotions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -258,14 +266,6 @@ INSERT INTO categories (id, name, parent_id) VALUES
   ('cat-14-3', 'Formations en ligne', 'pcat-14'),
   ('cat-14-4', 'Musique & vidéo dématérialisée', 'pcat-14')
 ON CONFLICT DO NOTHING;
-
--- Migration : colonne tags si absente
-ALTER TABLE products ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS is_flash_sale BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_discount_percent INTEGER;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_price DECIMAL(12,2);
-ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_started_at TIMESTAMPTZ;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS flash_sale_ends_at TIMESTAMPTZ;
 
 -- Nettoyage migration flash sale
 UPDATE products
