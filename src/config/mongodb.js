@@ -33,7 +33,9 @@ async function ensureIndexes() {
 
   try {
     await col.dropIndex('idx_text_search');
-  } catch (_e) { // index may not exist yet }
+  } catch (_e) {
+    // index may not exist yet
+  }
 
   await col.createIndex(
     { title: 'text', description: 'text', category_name: 'text', parent_category_name: 'text' },

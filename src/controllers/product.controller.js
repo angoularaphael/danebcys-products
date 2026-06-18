@@ -65,7 +65,11 @@ async function getAd(req, res, next) {
     await productService.incrementViews(req.params.id).catch(() => {});
     product.viewsCount++;
 
-    try { await searchClient.incrementViews(req.params.id); } catch (_e) { // best-effort }
+    try {
+      await searchClient.incrementViews(req.params.id);
+    } catch (_e) {
+      // best-effort
+    }
 
     const reviewService = require('../services/review.service');
     const [ratingData, reviewsData] = await Promise.all([
